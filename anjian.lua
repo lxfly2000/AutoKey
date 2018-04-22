@@ -1,0 +1,29 @@
+--ASCII:
+Z=string.byte('Z',1)
+X=string.byte('X',1)
+C=string.byte('C',1)
+
+sleep(1000)
+t=20
+for i=1,50,1 do
+	sleep(t)
+	sendKey(Z,true)
+	sleep(t)
+	sendKey(Z,false)
+	sleep(t)
+	sendKey(Z,true)
+	sleep(t)
+	sendKey(Z,false)
+	sleep(t)
+	sendKey(X,true)
+	sleep(t)
+	sendKey(X,false)
+	sleep(t)
+	sendKey(X,true)
+	sleep(t)
+	sendKey(X,false)
+	sleep(t)
+	sendKey(C,true)
+	sleep(t)
+	sendKey(C,false)
+end
