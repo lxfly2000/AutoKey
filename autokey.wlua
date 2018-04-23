@@ -86,6 +86,7 @@ function runScript()
 	if g_editFilePath:GetLineLength(0)==0 then
 		wx.wxMessageBox("未选择文件。",g_appname,wx.wxOK+wx.wxICON_EXCLAMATION,g_dialog)
 	else
+		--TODO：在协程里运行
 		dofile(g_editFilePath:GetLineText(0))
 	end
 end
@@ -139,6 +140,9 @@ function createDialog()
 	g_buttonPlay:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		runScript()
 	end)
+	g_buttonRecord:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
+		textMsg("TODO:制作中。")
+	end)
 	g_buttonSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		if g_editScript:SaveFile(g_editFilePath:GetLineText(0)) then
 			wx.wxMessageBox("保存成功。")
@@ -174,7 +178,7 @@ function createDialog()
 		wx.wxGetApp():ExitMainLoop()
 	end)
 
-	--注册快捷键（暂未找到使用全局快捷键的方法，准备考虑用HOOK……）
+	--注册快捷键（TODO:暂未找到使用全局快捷键的方法，准备考虑用HOOK……）
 	local hotkeys={wx.wxAcceleratorEntry()}
 	hotkeys[1]:Set(wx.wxACCEL_NORMAL,g_hotkeyPlay,ID_BUTTON_PLAY)
 	local hotkeyTable=wx.wxAcceleratorTable(hotkeys)
@@ -182,6 +186,10 @@ function createDialog()
 
 	--显示对话框
 	g_dialog:Show(true)
+end
+
+function textMsg(msg)
+	g_textCounter:SetLabel(msg)
 end
 
 --释放资源
