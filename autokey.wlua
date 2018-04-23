@@ -212,21 +212,15 @@ g_onSettingHotkeyRecord=false
 g_rightClickedControl=nil
 g_functionCount={
 	keyCount=0,
-	sleepCount=0,
 	displayCount=function(self)
-		textMsg(string.format("事件数：%d",self.keyCount+self.sleepCount))
+		textMsg(string.format("事件数：%d",self.keyCount))
 	end,
 	resetCount=function(self)
 		self.keyCount=0
-		self.sleepCount=0
 		self.displayCount(self)
 	end,
 	addKeyCount=function(self)
 		self.keyCount=self.keyCount+1
-		self.displayCount(self)
-	end,
-	addSleepCount=function(self)
-		self.sleepCount=self.sleepCount+1
 		self.displayCount(self)
 	end
 }
@@ -301,7 +295,6 @@ end
 function sleep(milliseconds)
 	if g_useSleep then
 		g_kernel32.Sleep(milliseconds)
-		g_functionCount:addSleepCount()
 	end
 end
 
