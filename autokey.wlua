@@ -48,7 +48,7 @@ g_buttonAbout=nil
 g_appname="AutoKey"
 g_author="lxfly2000"
 g_appurl="https://github.com/lxfly2000/AutoKey"
-g_version="1"
+g_version="0.1.1"
 g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
 g_hotkeyPlay=wx.WXK_F10
 g_strHotkeyPlay=" 回放:F10"
@@ -136,13 +136,18 @@ function createDialog()
 		local strpath=wx.wxFileSelector("选择文件",".",g_editFilePath:GetLineText(0),"lua","Lua脚本文件|*.lua|所有文件|*",wx.wxFD_OPEN+wx.wxFD_FILE_MUST_EXIST,g_dialog)
 		if #strpath~=0 then
 			g_editFilePath:SetValue(strpath)
-			local source=io.open(strpath,"r")
-			g_editScript:SetValue(source:read("*all"))
-			source:close()
+			g_editScript:LoadFile(strpath)
 		end
 	end)
 	g_buttonPlay:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		runScript()
+	end)
+	g_buttonSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
+		if g_editScript:SaveFile(g_editFilePath:GetLineText(0)) then
+			wx.wxMessageBox("保存成功。")
+		else
+			wx.wxMessageBox("保存失败。",g_appname,wx.wxICON_EXCLAMATION,g_dialog)
+		end
 	end)
 
 	--注册快捷键（暂未找到使用全局快捷键的方法，准备考虑用HOOK……）

@@ -1,4 +1,3 @@
---ASCII:
 Z=string.byte('Z',1)
 X=string.byte('X',1)
 C=string.byte('C',1)
