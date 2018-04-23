@@ -268,10 +268,10 @@ function keyboardHook(code,wParam,lParam)
 	if code==HC_ACTION then
 		local vkCode=alien.touint(lParam)
 		if wParam==WM_KEYUP or wParam==WM_SYSKEYUP then
-			if vkCode==g_hotkeyRecord then
+			if vkCode==g_hotkeyRecord and g_buttonRecord:IsEnabled() then
 				g_buttonRecord:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
 			end
-			if vkCode==g_hotkeyPlay then
+			if vkCode==g_hotkeyPlay and g_buttonPlay:IsEnabled() then
 				g_buttonPlay:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
 			end
 		end
@@ -316,22 +316,20 @@ function runScript()
 	if g_onRunningScript then
 		return
 	end
-	--TODO：改成loadstring后删除此判断
-	if g_editFilePath:GetLineLength(0)==0 then
-		wx.wxMessageBox("未选择文件。",g_appname,wx.wxOK+wx.wxICON_EXCLAMATION,g_dialog)
-		return
-	end
 	g_onRunningScript=true
 	g_functionCount:resetCount()
 	g_buttonPlay:SetLabel("停止(&P)")
-	--TODO：在协程或新线程里运行，运行完后调用 stopRunScript
-	--TODO：改成 loadstring
-	dofile(g_editFilePath:GetLineText(0))
+	g_buttonRecord:Enable(false)
+	local source=""
+	for i=1,g_editScript:GetNumberOfLines(),1 do
+		source=source..g_editScript:GetLineText(i-1).."\r\n"
+	end
+	loadstring(source)()
+	stopRunScript()
 end
 
 function stopRunScript()
-	--TODO
-	textMsg("TODO：停止运行脚本")
+	g_buttonRecord:Enable(true)
 	g_buttonPlay:SetLabel("回放(&P)")
 	g_onRunningScript=false
 end
@@ -339,6 +337,7 @@ end
 function recordScript()
 	g_onRecordingScript=true
 	g_buttonRecord:SetLabel("停止(&R)")
+	g_buttonPlay:Enable(false)
 	--TODO
 	textMsg("TODO：记录操作")
 end
@@ -346,6 +345,7 @@ end
 function stopRecordScript()
 	--TODO
 	textMsg("TODO：停止记录操作")
+	g_buttonPlay:Enable(true)
 	g_buttonRecord:SetLabel("记录(&R)")
 	g_onRecordingScript=false
 end
