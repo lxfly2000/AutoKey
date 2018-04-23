@@ -203,10 +203,35 @@ g_appurl="https://github.com/lxfly2000/AutoKey"
 g_version="0.1.1"
 g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
 g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
+g_hotkeyRecord=VK_F11
 g_useSleep=false
 g_hookproc=nil
 g_hookKeyboard=nil
 g_onSettingHotkeyPlay=false
+g_onSettingHotkeyRecord=false
+g_rightClickedControl=nil
+g_functionCount={
+	keyCount=0,
+	sleepCount=0,
+	displayCount=function(self)
+		textMsg(string.format("事件数：%d",self.keyCount+self.sleepCount))
+	end,
+	resetCount=function(self)
+		self.keyCount=0
+		self.sleepCount=0
+		self.displayCount(self)
+	end,
+	addKeyCount=function(self)
+		self.keyCount=self.keyCount+1
+		self.displayCount(self)
+	end,
+	addSleepCount=function(self)
+		self.sleepCount=self.sleepCount+1
+		self.displayCount(self)
+	end
+}
+g_onRunningScript=false
+g_onRecordingScript=false
 
 --DLL变量
 g_kernel32=nil
@@ -241,26 +266,34 @@ end
 
 function keyboardHook(code,wParam,lParam)
 	if code==HC_ACTION then
-		if wParam==WM_KEYDOWN or wParam==WM_SYSKEYDOWN then
-			--todo：录制时的键盘事件
-		elseif wParam==WM_KEYUP or wParam==WM_SYSKEYUP then
-			--todo：录制时的键盘事件
-			local vkCode=alien.touint(lParam)
-			if vkCode==g_hotkeyPlay then
-				runScript()
+		local vkCode=alien.touint(lParam)
+		if wParam==WM_KEYUP or wParam==WM_SYSKEYUP then
+			if vkCode==g_hotkeyRecord then
+				g_buttonRecord:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
 			end
-			otherKeyUpProcess(vkCode)
+			if vkCode==g_hotkeyPlay then
+				g_buttonPlay:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
+			end
 		end
+		otherKeyProcess(vkCode,wParam)
 	end
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
 
-function otherKeyUpProcess(vkCode)
-	if g_onSettingHotkeyPlay then
-		g_onSettingHotkeyPlay=false
-		g_hotkeyPlay=vkCode
-		g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
-		g_buttonPlay:SetLabel("回放(&P)")
+function otherKeyProcess(vkCode,msg)
+	if msg==WM_KEYUP or msg==WM_SYSKEYUP then
+		if g_onSettingHotkeyPlay then
+			g_onSettingHotkeyPlay=false
+			g_hotkeyPlay=vkCode
+			g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
+			g_buttonPlay:SetLabel("回放(&P)")
+		end
+		if g_onSettingHotkeyRecord then
+			g_onSettingHotkeyRecord=false
+			g_hotkeyRecord=vkCode
+			g_buttonRecord:SetToolTip("快捷键："..getVkText(g_hotkeyRecord))
+			g_buttonRecord:SetLabel("记录(&R)")
+		end
 	end
 end
 
@@ -268,22 +301,53 @@ end
 function sleep(milliseconds)
 	if g_useSleep then
 		g_kernel32.Sleep(milliseconds)
+		g_functionCount:addSleepCount()
 	end
 end
 
 function sendKey(vkCode,isPressDown)
 	if vkCode~=g_hotkeyPlay then
 		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+		g_functionCount:addKeyCount()
 	end
 end
 
 function runScript()
+	if g_onRunningScript then
+		return
+	end
+	--TODO：改成loadstring后删除此判断
 	if g_editFilePath:GetLineLength(0)==0 then
 		wx.wxMessageBox("未选择文件。",g_appname,wx.wxOK+wx.wxICON_EXCLAMATION,g_dialog)
-	else
-		--TODO：在协程里运行
-		dofile(g_editFilePath:GetLineText(0))
+		return
 	end
+	g_onRunningScript=true
+	g_functionCount:resetCount()
+	g_buttonPlay:SetLabel("停止(&P)")
+	--TODO：在协程或新线程里运行，运行完后调用 stopRunScript
+	--TODO：改成 loadstring
+	dofile(g_editFilePath:GetLineText(0))
+end
+
+function stopRunScript()
+	--TODO
+	textMsg("TODO：停止运行脚本")
+	g_buttonPlay:SetLabel("回放(&P)")
+	g_onRunningScript=false
+end
+
+function recordScript()
+	g_onRecordingScript=true
+	g_buttonRecord:SetLabel("停止(&R)")
+	--TODO
+	textMsg("TODO：记录操作")
+end
+
+function stopRecordScript()
+	--TODO
+	textMsg("TODO：停止记录操作")
+	g_buttonRecord:SetLabel("记录(&R)")
+	g_onRecordingScript=false
 end
 
 --创建对话框界面
@@ -297,6 +361,7 @@ function createDialog()
 	g_checkTimeBased=wx.wxCheckBox(g_dialog,ID_CHECK_TIMEBASED,"启用s&leep")
 	g_checkTimeBased:SetValue(g_useSleep)
 	g_buttonRecord=wx.wxButton(g_dialog,ID_BUTTON_RECORD,"记录(&R)")
+	g_buttonRecord:SetToolTip("快捷键："..getVkText(g_hotkeyRecord))
 	g_buttonPlay=wx.wxButton(g_dialog,ID_BUTTON_PLAY,"回放(&P)")
 	g_buttonPlay:SetDefault()
 	g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
@@ -337,13 +402,26 @@ function createDialog()
 		end
 	end)
 	g_buttonPlay:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
-		runScript()
+		if g_onRunningScript then
+			stopRunScript()
+		else
+			runScript()
+		end
 	end)
 	g_buttonPlay:Connect(wx.wxEVT_RIGHT_UP,function(event)
+		g_rightClickedControl=ID_BUTTON_PLAY
 		g_buttonPlay:PopupMenu(g_menuChangeHotkey)
 	end)
+	g_buttonRecord:Connect(wx.wxEVT_RIGHT_UP,function(event)
+		g_rightClickedControl=ID_BUTTON_RECORD
+		g_buttonRecord:PopupMenu(g_menuChangeHotkey)
+	end)
 	g_buttonRecord:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
-		textMsg("TODO:制作中。")
+		if g_onRecordingScript then
+			stopRecordScript()
+		else
+			recordScript()
+		end
 	end)
 	g_buttonSave:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		if g_editScript:SaveFile(g_editFilePath:GetLineText(0)) then
@@ -383,8 +461,13 @@ function createDialog()
 		g_useSleep=g_checkTimeBased:IsChecked()
 	end)
 	g_menuChangeHotkey:Connect(ID_MENUITEM_CHANGEHOTKEY,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
-		g_onSettingHotkeyPlay=true
-		g_buttonPlay:SetLabel("快捷键？")
+		if g_rightClickedControl==ID_BUTTON_PLAY then
+			g_onSettingHotkeyPlay=true
+			g_buttonPlay:SetLabel("快捷键？")
+		elseif g_rightClickedControl==ID_BUTTON_RECORD then
+			g_onSettingHotkeyRecord=true
+			g_buttonRecord:SetLabel("快捷键？")
+		end
 	end)
 
 	--注册钩子
@@ -400,6 +483,8 @@ end
 
 --释放资源
 function releaseApp()
+	stopRecordScript()
+	stopRunScript()
 	g_sysicon:RemoveIcon()
 	g_user32.UnhookWindowsHookEx(g_hookKeyboard)
 end
