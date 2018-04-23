@@ -199,6 +199,12 @@ end
 
 --主函数
 function main()
+	local akmutex=wx.wxSingleInstanceChecker()
+	akmutex:Create(g_appname)
+	if akmutex:IsAnotherRunning()==true then
+		wx.wxMessageBox("该程序已经在运行了，如果程序窗口未出现，请找到系统托盘图标并点击以显示窗口。")
+		return
+	end
 	getWindowsApi()
 	createDialog()
 	wx.wxGetApp():MainLoop()
