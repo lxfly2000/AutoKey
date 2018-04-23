@@ -32,6 +32,8 @@ ID_MENUITEM_SHOW=1001
 ID_MENUITEM_ABOUT=1002
 ID_MENUITEM_HELP=1003
 ID_MENUITEM_EXIT=1004
+ID_MENU_CHANGEHOTKEY=102
+ID_MENUITEM_CHANGEHOTKEY=1005
 
 g_dialog=nil
 g_textCounter=nil
@@ -45,6 +47,7 @@ g_buttonSave=nil
 g_buttonAbout=nil
 g_sysicon=nil
 g_menuSysicon=nil
+g_menuChangeHotkey=nil
 
 --虚拟键码（可读字符键的虚拟键码为ASCII，对于字母则是大写字符的ASCII）
 VK_LBUTTON=0x01
@@ -185,16 +188,25 @@ VK_NONAME=0xFC
 VK_PA1=0xFD
 VK_OEM_CLEAR=0xFE
 
+function getVkText(vk)
+	if (vk>=0x30 and vk<=0x39) or (vk>=0x41 and vk<=0x5A) then
+		return string.char(vk)
+	else
+		return string.format("0x%02X",vk)
+	end
+end
+
 --全局变量
 g_appname="AutoKey"
 g_author="lxfly2000"
 g_appurl="https://github.com/lxfly2000/AutoKey"
 g_version="0.1.1"
 g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
-g_hotkeyPlay=VK_F10
+g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_useSleep=false
 g_hookproc=nil
 g_hookKeyboard=nil
+g_onSettingHotkeyPlay=false
 
 --DLL变量
 g_kernel32=nil
@@ -233,12 +245,23 @@ function keyboardHook(code,wParam,lParam)
 			--todo：录制时的键盘事件
 		elseif wParam==WM_KEYUP or wParam==WM_SYSKEYUP then
 			--todo：录制时的键盘事件
-			if alien.touint(lParam)==g_hotkeyPlay then
+			local vkCode=alien.touint(lParam)
+			if vkCode==g_hotkeyPlay then
 				runScript()
 			end
+			otherKeyUpProcess(vkCode)
 		end
 	end
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
+end
+
+function otherKeyUpProcess(vkCode)
+	if g_onSettingHotkeyPlay then
+		g_onSettingHotkeyPlay=false
+		g_hotkeyPlay=vkCode
+		g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
+		g_buttonPlay:SetLabel("回放(&P)")
+	end
 end
 
 --WindowsAPI函数调用
@@ -249,7 +272,9 @@ function sleep(milliseconds)
 end
 
 function sendKey(vkCode,isPressDown)
-	g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+	if vkCode~=g_hotkeyPlay then
+		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+	end
 end
 
 function runScript()
@@ -274,6 +299,7 @@ function createDialog()
 	g_buttonRecord=wx.wxButton(g_dialog,ID_BUTTON_RECORD,"记录(&R)")
 	g_buttonPlay=wx.wxButton(g_dialog,ID_BUTTON_PLAY,"回放(&P)")
 	g_buttonPlay:SetDefault()
+	g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
 	g_buttonOpen=wx.wxButton(g_dialog,ID_BUTTON_OPEN,"打开(&O)")
 	g_buttonSave=wx.wxButton(g_dialog,ID_BUTTON_SAVE,"保存(&S)")
 	g_editScript=wx.wxTextCtrl(g_dialog,ID_EDIT_SCRIPT,"",wx.wxDefaultPosition,wx.wxDefaultSize,wx.wxTE_MULTILINE)
@@ -299,6 +325,8 @@ function createDialog()
 	g_menuSysicon:Append(ID_MENUITEM_HELP,"帮助(&H)")
 	g_menuSysicon:Append(ID_MENUITEM_ABOUT,"关于(&A)")
 	g_menuSysicon:Append(ID_MENUITEM_EXIT,"退出(&E)")
+	g_menuChangeHotkey=wx.wxMenu()
+	g_menuChangeHotkey:Append(ID_MENUITEM_CHANGEHOTKEY,"修改快捷键(&C)")
 
 	--添加事件
 	g_buttonOpen:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
@@ -310,6 +338,9 @@ function createDialog()
 	end)
 	g_buttonPlay:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		runScript()
+	end)
+	g_buttonPlay:Connect(wx.wxEVT_RIGHT_UP,function(event)
+		g_buttonPlay:PopupMenu(g_menuChangeHotkey)
 	end)
 	g_buttonRecord:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		textMsg("TODO:制作中。")
@@ -334,7 +365,7 @@ function createDialog()
 		g_dialog:Show(true)
 	end)
 	g_menuSysicon:Connect(ID_MENUITEM_HELP,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
-		wx.wxMessageBox("回放快捷键：F10\n退出：在托盘图标上右键选择退出。")
+		wx.wxMessageBox("录制操作：点击记录录制操作，然后点击回放可以重复已录制的操作。\n不会记录或回放快捷键。\n键盘脚本可以从文件读取或保存。\n退出：在托盘图标上右键选择退出。")
 	end)
 	g_menuSysicon:Connect(ID_MENUITEM_ABOUT,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
 		local aboutInfo=wx.wxAboutDialogInfo()
@@ -350,6 +381,10 @@ function createDialog()
 	end)
 	g_checkTimeBased:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED,function(event)
 		g_useSleep=g_checkTimeBased:IsChecked()
+	end)
+	g_menuChangeHotkey:Connect(ID_MENUITEM_CHANGEHOTKEY,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_onSettingHotkeyPlay=true
+		g_buttonPlay:SetLabel("快捷键？")
 	end)
 
 	--注册钩子
