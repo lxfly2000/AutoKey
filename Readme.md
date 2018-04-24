@@ -1,4 +1,4 @@
-# AutoKey (Under Developing)
+# AutoKey
 This is a lua script application automating keyboard operations like AnjianJingling.
 
 ## Prerequistics
