@@ -26,28 +26,32 @@ ID_EDIT_SCRIPT=104
 ID_BUTTON_OPEN=105
 ID_BUTTON_SAVE=106
 ID_EDIT_FILEPATH=107
-ID_CHECK_TIMEBASED=108
 ID_MENU_SYSICON=101
 ID_MENUITEM_SHOW=1001
 ID_MENUITEM_ABOUT=1002
 ID_MENUITEM_HELP=1003
 ID_MENUITEM_EXIT=1004
-ID_MENU_CHANGEHOTKEY=102
+ID_MENU_PLAY=102
 ID_MENUITEM_CHANGEHOTKEY=1005
+ID_MENUITEM_TIMEBASED=1006
+ID_MENUITEM_CLEARONRECORD=1007
+ID_MENU_RECORD=103
 
 g_dialog=nil
 g_textCounter=nil
 g_buttonRecord=nil
 g_buttonPlay=nil
 g_editScript=nil
-g_checkTimeBased=nil
 g_editFilePath=nil
 g_buttonOpen=nil
 g_buttonSave=nil
 g_buttonAbout=nil
 g_sysicon=nil
 g_menuSysicon=nil
-g_menuChangeHotkey=nil
+g_menuRecord=nil
+g_menuPlay=nil
+g_menuItemUseSleep=nil
+g_menuItemClearOnRecord=nil
 
 --虚拟键码（可读字符键的虚拟键码为ASCII，对于字母则是大写字符的ASCII）
 VK_LBUTTON=0x01
@@ -204,12 +208,11 @@ g_version="0.1.1"
 g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
 g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_hotkeyRecord=VK_F11
-g_useSleep=false
+g_useSleep=true
+g_clearOnRecord=false
 g_hookproc=nil
 g_hookKeyboard=nil
-g_onSettingHotkeyPlay=false
-g_onSettingHotkeyRecord=false
-g_rightClickedControl=nil
+g_onSettingHotkeyCtrlId=0
 g_functionCount={
 	keyCount=0,
 	displayCount=function(self)
@@ -274,18 +277,22 @@ function keyboardHook(code,wParam,lParam)
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
 
+function changeHotkeyTip(ctrl,key)
+	ctrl:SetToolTip("快捷键："..getVkText(key))
+end
+
 function otherKeyProcess(vkCode,msg)
 	if msg==WM_KEYUP or msg==WM_SYSKEYUP then
-		if g_onSettingHotkeyPlay then
-			g_onSettingHotkeyPlay=false
+		if g_onSettingHotkeyCtrlId==ID_BUTTON_PLAY then
+			g_onSettingHotkeyCtrlId=0
 			g_hotkeyPlay=vkCode
-			g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
+			changeHotkeyTip(g_buttonPlay,g_hotkeyPlay)
 			g_buttonPlay:SetLabel("回放(&P)")
 		end
-		if g_onSettingHotkeyRecord then
-			g_onSettingHotkeyRecord=false
+		if g_onSettingHotkeyCtrlId==ID_BUTTON_RECORD then
+			g_onSettingHotkeyCtrlId=0
 			g_hotkeyRecord=vkCode
-			g_buttonRecord:SetToolTip("快捷键："..getVkText(g_hotkeyRecord))
+			changeHotkeyTip(g_buttonRecord,g_hotkeyRecord)
 			g_buttonRecord:SetLabel("记录(&R)")
 		end
 	end
@@ -317,6 +324,7 @@ function runScript()
 	for i=1,g_editScript:GetNumberOfLines(),1 do
 		source=source..g_editScript:GetLineText(i-1).."\r\n"
 	end
+	--TODO：由于Lua和wxWidget均没有真正意义上的多线程，正准备考虑用Windows的……
 	loadstring(source)()
 	stopRunScript()
 end
@@ -351,19 +359,16 @@ function createDialog()
 	local boxSizerFilePath=wx.wxBoxSizer(wx.wxHORIZONTAL)
 	local boxSizerBase=wx.wxBoxSizer(wx.wxVERTICAL)
 	g_textCounter=wx.wxStaticText(g_dialog,ID_STATIC_EVENTCOUNTER,"事件数：#/#")
-	g_checkTimeBased=wx.wxCheckBox(g_dialog,ID_CHECK_TIMEBASED,"启用s&leep")
-	g_checkTimeBased:SetValue(g_useSleep)
 	g_buttonRecord=wx.wxButton(g_dialog,ID_BUTTON_RECORD,"记录(&R)")
-	g_buttonRecord:SetToolTip("快捷键："..getVkText(g_hotkeyRecord))
+	changeHotkeyTip(g_buttonRecord,g_hotkeyRecord)
 	g_buttonPlay=wx.wxButton(g_dialog,ID_BUTTON_PLAY,"回放(&P)")
 	g_buttonPlay:SetDefault()
-	g_buttonPlay:SetToolTip("快捷键："..getVkText(g_hotkeyPlay))
+	changeHotkeyTip(g_buttonPlay,g_hotkeyPlay)
 	g_buttonOpen=wx.wxButton(g_dialog,ID_BUTTON_OPEN,"打开(&O)")
 	g_buttonSave=wx.wxButton(g_dialog,ID_BUTTON_SAVE,"保存(&S)")
 	g_editScript=wx.wxTextCtrl(g_dialog,ID_EDIT_SCRIPT,"",wx.wxDefaultPosition,wx.wxDefaultSize,wx.wxTE_MULTILINE)
 	g_editFilePath=wx.wxTextCtrl(g_dialog,ID_EDIT_FILEPATH)
 	boxSizerCounter:Add(g_textCounter,1,wx.wxALIGN_CENTER_VERTICAL+wx.wxLEFT+wx.wxRIGHT,2)
-	boxSizerCounter:Add(g_checkTimeBased,0,wx.wxALIGN_CENTER)
 	boxSizerCounter:Add(g_buttonRecord)
 	boxSizerCounter:Add(g_buttonPlay)
 	boxSizerFilePath:Add(g_editFilePath,1,wx.wxEXPAND)
@@ -383,8 +388,16 @@ function createDialog()
 	g_menuSysicon:Append(ID_MENUITEM_HELP,"帮助(&H)")
 	g_menuSysicon:Append(ID_MENUITEM_ABOUT,"关于(&A)")
 	g_menuSysicon:Append(ID_MENUITEM_EXIT,"退出(&E)")
-	g_menuChangeHotkey=wx.wxMenu()
-	g_menuChangeHotkey:Append(ID_MENUITEM_CHANGEHOTKEY,"修改快捷键(&C)")
+	g_menuRecord=wx.wxMenu()
+	g_menuRecord:Append(ID_MENUITEM_CHANGEHOTKEY,"修改快捷键(&H)")
+	g_menuItemClearOnRecord=wx.wxMenuItem(g_menuRecord,ID_MENUITEM_CLEARONRECORD,"记录时清空脚本(&C)","",wx.wxITEM_CHECK)
+	g_menuRecord:Append(g_menuItemClearOnRecord)
+	g_menuItemClearOnRecord:Check(g_clearOnRecord)
+	g_menuPlay=wx.wxMenu()
+	g_menuPlay:Append(ID_MENUITEM_CHANGEHOTKEY,"修改快捷键(&H)")
+	g_menuItemUseSleep=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_TIMEBASED,"启用&Sleep","",wx.wxITEM_CHECK)
+	g_menuPlay:Append(g_menuItemUseSleep)
+	g_menuItemUseSleep:Check(g_useSleep)
 
 	--添加事件
 	g_buttonOpen:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
@@ -402,12 +415,10 @@ function createDialog()
 		end
 	end)
 	g_buttonPlay:Connect(wx.wxEVT_RIGHT_UP,function(event)
-		g_rightClickedControl=ID_BUTTON_PLAY
-		g_buttonPlay:PopupMenu(g_menuChangeHotkey)
+		g_buttonPlay:PopupMenu(g_menuPlay)
 	end)
 	g_buttonRecord:Connect(wx.wxEVT_RIGHT_UP,function(event)
-		g_rightClickedControl=ID_BUTTON_RECORD
-		g_buttonRecord:PopupMenu(g_menuChangeHotkey)
+		g_buttonRecord:PopupMenu(g_menuRecord)
 	end)
 	g_buttonRecord:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
 		if g_onRecordingScript then
@@ -450,17 +461,19 @@ function createDialog()
 	g_menuSysicon:Connect(ID_MENUITEM_EXIT,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
 		wx.wxGetApp():ExitMainLoop()
 	end)
-	g_checkTimeBased:Connect(wx.wxEVT_COMMAND_CHECKBOX_CLICKED,function(event)
-		g_useSleep=g_checkTimeBased:IsChecked()
+	g_menuRecord:Connect(ID_MENUITEM_CHANGEHOTKEY,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_onSettingHotkeyCtrlId=ID_BUTTON_RECORD
+		g_buttonRecord:SetLabel("快捷键？")
 	end)
-	g_menuChangeHotkey:Connect(ID_MENUITEM_CHANGEHOTKEY,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
-		if g_rightClickedControl==ID_BUTTON_PLAY then
-			g_onSettingHotkeyPlay=true
-			g_buttonPlay:SetLabel("快捷键？")
-		elseif g_rightClickedControl==ID_BUTTON_RECORD then
-			g_onSettingHotkeyRecord=true
-			g_buttonRecord:SetLabel("快捷键？")
-		end
+	g_menuRecord:Connect(ID_MENUITEM_CLEARONRECORD,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_clearOnRecord=g_menuItemClearOnRecord:IsChecked()
+	end)
+	g_menuPlay:Connect(ID_MENUITEM_CHANGEHOTKEY,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_onSettingHotkeyCtrlId=ID_BUTTON_PLAY
+		g_buttonPlay:SetLabel("快捷键？")
+	end)
+	g_menuPlay:Connect(ID_MENUITEM_TIMEBASED,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_useSleep=g_menuItemUseSleep:IsChecked()
 	end)
 
 	--注册钩子
