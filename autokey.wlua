@@ -306,6 +306,9 @@ function keyProcess(vkCode,msg)
 end
 
 function addRecordKeyEvent(vkCode,isPressDown)
+	if vkCode==g_hotkeyRecord then
+		return
+	end
 	local now_clock=os.clock()
 	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\r\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
 	g_lastRecordEventTime=now_clock
