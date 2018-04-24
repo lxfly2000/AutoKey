@@ -200,11 +200,16 @@ function getVkText(vk)
 	end
 end
 
+function getDateTimeString()
+	return "录制于："..os.date("%Y-%m-%d %X")
+end
+
 --全局变量
 g_appname="AutoKey"
 g_author="lxfly2000"
 g_appurl="https://github.com/lxfly2000/AutoKey"
-g_version="0.1.1"
+g_version="1"
+g_startMessage="AutoKey by lxfly2000"
 g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
 g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_hotkeyRecord=VK_F11
@@ -229,6 +234,7 @@ g_functionCount={
 }
 g_onRunningScript=false
 g_onRecordingScript=false
+g_lastRecordEventTime=0
 
 --DLL变量
 g_kernel32=nil
@@ -263,16 +269,7 @@ end
 
 function keyboardHook(code,wParam,lParam)
 	if code==HC_ACTION then
-		local vkCode=alien.touint(lParam)
-		if wParam==WM_KEYUP or wParam==WM_SYSKEYUP then
-			if vkCode==g_hotkeyRecord and g_buttonRecord:IsEnabled() then
-				g_buttonRecord:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
-			end
-			if vkCode==g_hotkeyPlay and g_buttonPlay:IsEnabled() then
-				g_buttonPlay:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
-			end
-		end
-		otherKeyProcess(vkCode,wParam)
+		keyProcess(alien.touint(lParam),wParam)
 	end
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
@@ -281,21 +278,38 @@ function changeHotkeyTip(ctrl,key)
 	ctrl:SetToolTip("快捷键："..getVkText(key))
 end
 
-function otherKeyProcess(vkCode,msg)
+function keyProcess(vkCode,msg)
 	if msg==WM_KEYUP or msg==WM_SYSKEYUP then
-		if g_onSettingHotkeyCtrlId==ID_BUTTON_PLAY then
+		if g_onSettingHotkeyCtrlId==ID_BUTTON_PLAY then--设置回放快捷键
 			g_onSettingHotkeyCtrlId=0
 			g_hotkeyPlay=vkCode
 			changeHotkeyTip(g_buttonPlay,g_hotkeyPlay)
 			g_buttonPlay:SetLabel("回放(&P)")
-		end
-		if g_onSettingHotkeyCtrlId==ID_BUTTON_RECORD then
+		elseif g_onSettingHotkeyCtrlId==ID_BUTTON_RECORD then--设置录制快捷键
 			g_onSettingHotkeyCtrlId=0
 			g_hotkeyRecord=vkCode
 			changeHotkeyTip(g_buttonRecord,g_hotkeyRecord)
 			g_buttonRecord:SetLabel("记录(&R)")
+		elseif vkCode==g_hotkeyRecord and g_buttonRecord:IsEnabled() then--录制命令
+			g_buttonRecord:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
+		elseif vkCode==g_hotkeyPlay and g_buttonPlay:IsEnabled() then--回放命令
+			g_buttonPlay:Command(wx.wxCommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED))
 		end
 	end
+	if g_onRecordingScript then
+		if msg==WM_KEYUP or msg==WM_SYSKEYUP then
+			addRecordKeyEvent(vkCode,false)
+		elseif msg==WM_KEYDOWN or msg==WM_SYSKEYDOWN then
+			addRecordKeyEvent(vkCode,true)
+		end
+	end
+end
+
+function addRecordKeyEvent(vkCode,isPressDown)
+	local now_clock=os.clock()
+	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\r\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
+	g_lastRecordEventTime=now_clock
+	g_functionCount:addKeyCount()
 end
 
 --WindowsAPI函数调用
@@ -306,10 +320,8 @@ function sleep(milliseconds)
 end
 
 function sendKey(vkCode,isPressDown)
-	if vkCode~=g_hotkeyPlay then
-		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
-		g_functionCount:addKeyCount()
-	end
+	g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+	g_functionCount:addKeyCount()
 end
 
 function runScript()
@@ -339,13 +351,17 @@ function recordScript()
 	g_onRecordingScript=true
 	g_buttonRecord:SetLabel("停止(&R)")
 	g_buttonPlay:Enable(false)
-	--TODO
-	textMsg("TODO：记录操作")
+	if g_clearOnRecord then
+		g_editScript:Clear()
+	end
+	g_editScript:AppendText("--"..getDateTimeString().."\r\n")
+	g_functionCount:resetCount()
+	g_onRecordingScript=true
+	g_lastRecordEventTime=os.clock()
 end
 
 function stopRecordScript()
-	--TODO
-	textMsg("TODO：停止记录操作")
+	g_onRecordingScript=false
 	g_buttonPlay:Enable(true)
 	g_buttonRecord:SetLabel("记录(&R)")
 	g_onRecordingScript=false
@@ -358,7 +374,7 @@ function createDialog()
 	local boxSizerCounter=wx.wxBoxSizer(wx.wxHORIZONTAL)
 	local boxSizerFilePath=wx.wxBoxSizer(wx.wxHORIZONTAL)
 	local boxSizerBase=wx.wxBoxSizer(wx.wxVERTICAL)
-	g_textCounter=wx.wxStaticText(g_dialog,ID_STATIC_EVENTCOUNTER,"事件数：#/#")
+	g_textCounter=wx.wxStaticText(g_dialog,ID_STATIC_EVENTCOUNTER,g_startMessage)
 	g_buttonRecord=wx.wxButton(g_dialog,ID_BUTTON_RECORD,"记录(&R)")
 	changeHotkeyTip(g_buttonRecord,g_hotkeyRecord)
 	g_buttonPlay=wx.wxButton(g_dialog,ID_BUTTON_PLAY,"回放(&P)")
@@ -431,7 +447,7 @@ function createDialog()
 		if g_editScript:SaveFile(g_editFilePath:GetLineText(0)) then
 			wx.wxMessageBox("保存成功。")
 		else
-			wx.wxMessageBox("保存失败。",g_appname,wx.wxICON_EXCLAMATION,g_dialog)
+			wx.wxMessageBox("保存失败，请确认是否输入了有效的文件路径。",g_appname,wx.wxICON_EXCLAMATION,g_dialog)
 		end
 	end)
 	g_sysicon:Connect(wx.wxEVT_TASKBAR_LEFT_DOWN,function(event)
