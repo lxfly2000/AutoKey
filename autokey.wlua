@@ -310,7 +310,7 @@ function addRecordKeyEvent(vkCode,isPressDown)
 		return
 	end
 	local now_clock=os.clock()
-	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\r\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
+	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
 	g_lastRecordEventTime=now_clock
 	g_functionCount:addKeyCount()
 end
@@ -337,9 +337,9 @@ function runScript()
 	g_buttonRecord:Enable(false)
 	local source=""
 	for i=1,g_editScript:GetNumberOfLines(),1 do
-		source=source..g_editScript:GetLineText(i-1).."\r\n"
+		source=source..g_editScript:GetLineText(i-1).."\n"
 	end
-	--TODO：由于Lua和wxWidget均没有真正意义上的多线程，正准备考虑用Windows的……
+	--TODO：由于Lua和wxLua均没有真正意义上的多线程，正准备考虑用Windows的……
 	loadstring(source)()
 	stopRunScript()
 end
@@ -357,7 +357,7 @@ function recordScript()
 	if g_clearOnRecord then
 		g_editScript:Clear()
 	end
-	g_editScript:AppendText("--"..getDateTimeString().."\r\n")
+	g_editScript:AppendText("--"..getDateTimeString().."\n")
 	g_functionCount:resetCount()
 	g_onRecordingScript=true
 	g_lastRecordEventTime=os.clock()
