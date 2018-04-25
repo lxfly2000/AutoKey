@@ -219,23 +219,23 @@ g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_hotkeyRecord=VK_F11
 g_useSleep=true
 g_useKeyEvent=true
-g_useMouseEvent=true
+g_useMouseEvent=false
 g_clearOnRecord=false
 g_hookproc=nil
 g_hookKeyboard=nil
 g_hookMouse=nil
 g_onSettingHotkeyCtrlId=0
 g_functionCount={
-	keyCount=0,
+	eventCount=0,
 	displayCount=function(self)
-		textMsg(string.format("事件数：%d",self.keyCount))
+		textMsg(string.format("事件数：%d",self.eventCount))
 	end,
 	resetCount=function(self)
-		self.keyCount=0
+		self.eventCount=0
 		self.displayCount(self)
 	end,
-	addKeyCount=function(self)
-		self.keyCount=self.keyCount+1
+	addCount=function(self)
+		self.eventCount=self.eventCount+1
 		self.displayCount(self)
 	end
 }
@@ -260,6 +260,11 @@ WM_LBUTTONDOWN=0x201
 WM_LBUTTONUP=0x202
 WM_RBUTTONDOWN=0x204
 WM_RBUTTONUP=0x205
+MOUSEEVENTF_ABSOLUTE=0x8000
+MOUSEEVENTF_LEFTDOWN=0x0002
+MOUSEEVENTF_LEFTUP=0x0004
+MOUSEEVENTF_RIGHTDOWN=0x0008
+MOUSEEVENTF_RIGHTUP=0x0010
 
 --自定义常量
 MOUSE_LBUTTON=0
@@ -282,12 +287,12 @@ function getWindowsApi()
 	--User32.dll:LRESULT WINAPI CallNextHookEx(HHOOK hhk,int nCode,WPARAM wParam,LPARAM lParam);
 	g_user32.CallNextHookEx:types{ret="long","pointer","int","uint","long",abi="stdcall"}
 	--typedef LRESULT (CALLBACK* HOOKPROC)(int code, WPARAM wParam, LPARAM lParam);
-	g_hookproc=alien.callback(keyboardHook,{ret="long","int","uint","pointer"--[["long"]],abi="stdcall"})--党中央已经钦定啦！参数3的类型就是pointer，这样吼不吼啊？
+	g_hookproc=alien.callback(hookProcess,{ret="long","int","uint","pointer"--[["long"]],abi="stdcall"})--党中央已经钦定啦！参数3的类型就是pointer，这样吼不吼啊？
 end
 
-function keyboardHook(code,wParam,lParam)
+function hookProcess(code,wParam,lParam)
 	if code==HC_ACTION then
-		keyProcess(wParam,lParam)
+		processHookMsg(wParam,lParam)
 	end
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
@@ -296,7 +301,7 @@ function changeHotkeyTip(ctrl,key)
 	ctrl:SetToolTip("快捷键："..getVkText(key))
 end
 
-function keyProcess(msg,param)
+function processHookMsg(msg,param)
 	if msg==WM_KEYUP or msg==WM_SYSKEYUP then
 		local vkCode=alien.touint(param)
 		if g_onSettingHotkeyCtrlId==ID_BUTTON_PLAY then--设置回放快捷键
@@ -339,18 +344,17 @@ function addRecordKeyEvent(vkCode,isPressDown)
 	local now_clock=os.clock()
 	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
 	g_lastRecordEventTime=now_clock
-	g_functionCount:addKeyCount()
+	g_functionCount:addCount()
 end
 
 function addRecordMouseEvent(mButton,isPressDown,param)
 	local now_clock=os.clock()
-	--TODO：解析x，y
-	local x=0
-	local y=0
+	--point=alien.tolong(param,2)--TODO：这样貌似不对？
+	local x=0--point[1]
+	local y=0--point[2]
 	g_editScript:AppendText(string.format("sleep(%d)sendMouse(%d,%s,%d,%d)\n",(now_clock-g_lastRecordEventTime)*1000,mButton,isPressDown and "true" or "false",x,y))
 	g_lastRecordEventTime=now_clock
-	g_functionCount:addKeyCount()
-	textMsg("TODO：解析x，y")
+	g_functionCount:addCount()
 end
 
 --WindowsAPI函数调用
@@ -363,15 +367,28 @@ end
 function sendKey(vkCode,isPressDown)
 	if g_useKeyEvent then
 		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
-		g_functionCount:addKeyCount()
+		g_functionCount:addCount()
 	end
 end
 
 function sendMouse(mButton,isPressDown,x,y)
 	if g_useMouseEvent then
-		--g_user32:mouse_event()--TODO：参数？
-		g_functionCount:addKeyCount()
-		textMsg("TODO：mouse_event的参数")
+		local flag=MOUSEEVENTF_ABSOLUTE
+		if isPressDown then
+			if mButton==MOUSE_LBUTTON then
+				flag=flag+MOUSEEVENTF_LEFTDOWN
+			elseif mButton==MOUSE_RBUTTON then
+				flag=flag+MOUSEEVENTF_RIGHTDOWN
+			end
+		else
+			if mButton==MOUSE_LBUTTON then
+				flag=flag+MOUSEEVENTF_LEFTUP
+			elseif mButton==MOUSE_RBUTTON then
+				flag=flag+MOUSEEVENTF_RIGHTUP
+			end
+		end
+		g_user32.mouse_event(flag,x,y,0,0)
+		g_functionCount:addCount()
 	end
 end
 
@@ -468,7 +485,7 @@ function createDialog()
 	g_menuItemUseKeyEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEKEYEVENT,"启用 send&Key","",wx.wxITEM_CHECK)
 	g_menuPlay:Append(g_menuItemUseKeyEvent)
 	g_menuItemUseKeyEvent:Check(g_useKeyEvent)
-	g_menuItemUseMouseEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEMOUSEEVENT,"启用 send&Mouse","",wx.wxITEM_CHECK)
+	g_menuItemUseMouseEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEMOUSEEVENT,"启用 send&Mouse（暂时无法使用）","",wx.wxITEM_CHECK)
 	g_menuPlay:Append(g_menuItemUseMouseEvent)
 	g_menuItemUseMouseEvent:Check(g_useMouseEvent)
 
