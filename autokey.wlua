@@ -223,6 +223,7 @@ g_useMouseEvent=true
 g_clearOnRecord=false
 g_hookproc=nil
 g_hookKeyboard=nil
+g_hookMouse=nil
 g_onSettingHotkeyCtrlId=0
 g_functionCount={
 	keyCount=0,
@@ -253,7 +254,16 @@ WM_KEYUP=0x101
 WM_SYSKEYDOWN=0x104
 WM_SYSKEYUP=0x105
 WH_KEYBOARD_LL=13
+WH_MOUSE_LL=14
 HC_ACTION=0
+WM_LBUTTONDOWN=0x201
+WM_LBUTTONUP=0x202
+WM_RBUTTONDOWN=0x204
+WM_RBUTTONUP=0x205
+
+--自定义常量
+MOUSE_LBUTTON=0
+MOUSE_RBUTTON=1
 
 --获取WindowsAPI
 function getWindowsApi()
@@ -263,6 +273,8 @@ function getWindowsApi()
 	g_kernel32.Sleep:types{ret="void","ulong",abi="stdcall"}
 	--User32.dll:VOID WINAPI keybd_event(BYTE bVk,BYTE bScan,DWORD dwFlags,ULONG_PTR dwExtraInfo);
 	g_user32.keybd_event:types{ret="void","byte","byte","ulong","ulong",abi="stdcall"}
+	--User32.dll:VOID WINAPI mouse_event(DWORD dwFlags,DWORD dx,DWORD dy,DWORD dwData,ULONG_PTR dwExtraInfo);
+	g_user32.mouse_event:types{ret="void","ulong","ulong","ulong","ulong","ulong",abi="stdcall"}
 	--User32.dll:HHOOK WINAPI SetWindowsHookEx(int idHook,HOOKPROC lpfn,HINSTANCE hMod,DWORD dwThreadId);
 	g_user32.SetWindowsHookExA:types{ret="pointer","int","callback","pointer","ulong",abi="stdcall"}
 	--User32.dll:BOOL WINAPI UnhookWindowsHookEx(HHOOK hhk);
@@ -275,7 +287,7 @@ end
 
 function keyboardHook(code,wParam,lParam)
 	if code==HC_ACTION then
-		keyProcess(alien.touint(lParam),wParam)
+		keyProcess(wParam,lParam)
 	end
 	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
@@ -284,8 +296,9 @@ function changeHotkeyTip(ctrl,key)
 	ctrl:SetToolTip("快捷键："..getVkText(key))
 end
 
-function keyProcess(vkCode,msg)
+function keyProcess(msg,param)
 	if msg==WM_KEYUP or msg==WM_SYSKEYUP then
+		local vkCode=alien.touint(param)
 		if g_onSettingHotkeyCtrlId==ID_BUTTON_PLAY then--设置回放快捷键
 			g_onSettingHotkeyCtrlId=0
 			g_hotkeyPlay=vkCode
@@ -304,9 +317,17 @@ function keyProcess(vkCode,msg)
 	end
 	if g_onRecordingScript then
 		if msg==WM_KEYUP or msg==WM_SYSKEYUP then
-			addRecordKeyEvent(vkCode,false)
+			addRecordKeyEvent(alien.touint(param),false)
 		elseif msg==WM_KEYDOWN or msg==WM_SYSKEYDOWN then
-			addRecordKeyEvent(vkCode,true)
+			addRecordKeyEvent(alien.touint(param),true)
+		elseif msg==WM_LBUTTONDOWN then
+			addRecordMouseEvent(MOUSE_LBUTTON,true,param)
+		elseif msg==WM_LBUTTONUP then
+			addRecordMouseEvent(MOUSE_LBUTTON,false,param)
+		elseif msg==WM_RBUTTONDOWN then
+			addRecordMouseEvent(MOUSE_RBUTTON,true,param)
+		elseif msg==WM_RBUTTONUP then
+			addRecordMouseEvent(MOUSE_RBUTTON,false,param)
 		end
 	end
 end
@@ -319,6 +340,17 @@ function addRecordKeyEvent(vkCode,isPressDown)
 	g_editScript:AppendText(string.format("sleep(%d)sendKey(%d,%s)\n",(now_clock-g_lastRecordEventTime)*1000,vkCode,isPressDown and "true" or "false"))
 	g_lastRecordEventTime=now_clock
 	g_functionCount:addKeyCount()
+end
+
+function addRecordMouseEvent(mButton,isPressDown,param)
+	local now_clock=os.clock()
+	--TODO：解析x，y
+	local x=0
+	local y=0
+	g_editScript:AppendText(string.format("sleep(%d)sendMouse(%d,%s,%d,%d)\n",(now_clock-g_lastRecordEventTime)*1000,mButton,isPressDown and "true" or "false",x,y))
+	g_lastRecordEventTime=now_clock
+	g_functionCount:addKeyCount()
+	textMsg("TODO：解析x，y")
 end
 
 --WindowsAPI函数调用
@@ -335,8 +367,12 @@ function sendKey(vkCode,isPressDown)
 	end
 end
 
-function sendMouse()
-	--TODO：实现鼠标事件
+function sendMouse(mButton,isPressDown,x,y)
+	if g_useMouseEvent then
+		--g_user32:mouse_event()--TODO：参数？
+		g_functionCount:addKeyCount()
+		textMsg("TODO：mouse_event的参数")
+	end
 end
 
 function runScript()
@@ -521,6 +557,7 @@ function createDialog()
 
 	--注册钩子
 	g_hookKeyboard=g_user32.SetWindowsHookExA(WH_KEYBOARD_LL,g_hookproc,nil,nil)
+	g_hookMouse=g_user32.SetWindowsHookExA(WH_MOUSE_LL,g_hookproc,nil,nil)
 
 	--显示对话框
 	g_dialog:Show(true)
@@ -535,6 +572,7 @@ function releaseApp()
 	stopRecordScript()
 	stopRunScript()
 	g_sysicon:RemoveIcon()
+	g_user32.UnhookWindowsHookEx(g_hookMouse)
 	g_user32.UnhookWindowsHookEx(g_hookKeyboard)
 end
 
