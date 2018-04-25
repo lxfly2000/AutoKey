@@ -36,6 +36,8 @@ ID_MENUITEM_CHANGEHOTKEY=1005
 ID_MENUITEM_TIMEBASED=1006
 ID_MENUITEM_CLEARONRECORD=1007
 ID_MENU_RECORD=103
+ID_MENUITEM_USEKEYEVENT=1008
+ID_MENUITEM_USEMOUSEEVENT=1009
 
 g_dialog=nil
 g_textCounter=nil
@@ -52,6 +54,8 @@ g_menuRecord=nil
 g_menuPlay=nil
 g_menuItemUseSleep=nil
 g_menuItemClearOnRecord=nil
+g_menuItemUseKeyEvent=nil
+g_menuItemUseMouseEvent=nil
 
 --虚拟键码（可读字符键的虚拟键码为ASCII，对于字母则是大写字符的ASCII）
 VK_LBUTTON=0x01
@@ -201,7 +205,7 @@ function getVkText(vk)
 end
 
 function getDateTimeString()
-	return "录制于："..os.date("%Y-%m-%d %X")
+	return os.date("%Y-%m-%d %X")
 end
 
 --全局变量
@@ -214,6 +218,8 @@ g_appdesc="此程序可以模仿按键精灵的方式来帮助你完成重复性的键盘操作。"
 g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_hotkeyRecord=VK_F11
 g_useSleep=true
+g_useKeyEvent=true
+g_useMouseEvent=true
 g_clearOnRecord=false
 g_hookproc=nil
 g_hookKeyboard=nil
@@ -323,8 +329,14 @@ function sleep(milliseconds)
 end
 
 function sendKey(vkCode,isPressDown)
-	g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
-	g_functionCount:addKeyCount()
+	if g_useKeyEvent then
+		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+		g_functionCount:addKeyCount()
+	end
+end
+
+function sendMouse()
+	--TODO：实现鼠标事件
 end
 
 function runScript()
@@ -357,7 +369,7 @@ function recordScript()
 	if g_clearOnRecord then
 		g_editScript:Clear()
 	end
-	g_editScript:AppendText("--"..getDateTimeString().."\n")
+	g_editScript:AppendText("--录制于："..getDateTimeString().."\n")
 	g_functionCount:resetCount()
 	g_onRecordingScript=true
 	g_lastRecordEventTime=os.clock()
@@ -414,9 +426,15 @@ function createDialog()
 	g_menuItemClearOnRecord:Check(g_clearOnRecord)
 	g_menuPlay=wx.wxMenu()
 	g_menuPlay:Append(ID_MENUITEM_CHANGEHOTKEY,"修改快捷键(&H)")
-	g_menuItemUseSleep=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_TIMEBASED,"启用&Sleep","",wx.wxITEM_CHECK)
+	g_menuItemUseSleep=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_TIMEBASED,"启用 &sleep","",wx.wxITEM_CHECK)
 	g_menuPlay:Append(g_menuItemUseSleep)
 	g_menuItemUseSleep:Check(g_useSleep)
+	g_menuItemUseKeyEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEKEYEVENT,"启用 send&Key","",wx.wxITEM_CHECK)
+	g_menuPlay:Append(g_menuItemUseKeyEvent)
+	g_menuItemUseKeyEvent:Check(g_useKeyEvent)
+	g_menuItemUseMouseEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEMOUSEEVENT,"启用 send&Mouse","",wx.wxITEM_CHECK)
+	g_menuPlay:Append(g_menuItemUseMouseEvent)
+	g_menuItemUseMouseEvent:Check(g_useMouseEvent)
 
 	--添加事件
 	g_buttonOpen:Connect(wx.wxEVT_COMMAND_BUTTON_CLICKED,function(event)
@@ -493,6 +511,12 @@ function createDialog()
 	end)
 	g_menuPlay:Connect(ID_MENUITEM_TIMEBASED,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
 		g_useSleep=g_menuItemUseSleep:IsChecked()
+	end)
+	g_menuPlay:Connect(ID_MENUITEM_USEKEYEVENT,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_useKeyEvent=g_menuItemUseKeyEvent:IsChecked()
+	end)
+	g_menuPlay:Connect(ID_MENUITEM_USEMOUSEEVENT,wx.wxEVT_COMMAND_MENU_SELECTED,function(event)
+		g_useMouseEvent=g_menuItemUseMouseEvent:IsChecked()
 	end)
 
 	--注册钩子
