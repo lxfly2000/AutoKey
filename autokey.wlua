@@ -219,7 +219,7 @@ g_hotkeyPlay=VK_F12--VK_*或string.byte('<大写ASCII字符或数字>',1)
 g_hotkeyRecord=VK_F11
 g_useSleep=true
 g_useKeyEvent=true
-g_useMouseEvent=false
+g_useMouseEvent=true
 g_clearOnRecord=false
 g_hookproc=nil
 g_hookKeyboard=nil
@@ -263,6 +263,7 @@ WM_RBUTTONUP=0x205
 MOUSEEVENTF_ABSOLUTE=0x8000
 MOUSEEVENTF_LEFTDOWN=0x0002
 MOUSEEVENTF_LEFTUP=0x0004
+MOUSEEVENTF_MOVE=0x0001
 MOUSEEVENTF_RIGHTDOWN=0x0008
 MOUSEEVENTF_RIGHTUP=0x0010
 
@@ -373,7 +374,7 @@ end
 
 function sendMouse(mButton,isPressDown,x,y)
 	if g_useMouseEvent then
-		local flag=MOUSEEVENTF_ABSOLUTE
+		local flag=MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE
 		if isPressDown then
 			if mButton==MOUSE_LBUTTON then
 				flag=flag+MOUSEEVENTF_LEFTDOWN
@@ -485,7 +486,7 @@ function createDialog()
 	g_menuItemUseKeyEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEKEYEVENT,"启用 send&Key","",wx.wxITEM_CHECK)
 	g_menuPlay:Append(g_menuItemUseKeyEvent)
 	g_menuItemUseKeyEvent:Check(g_useKeyEvent)
-	g_menuItemUseMouseEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEMOUSEEVENT,"启用 send&Mouse（暂时无法使用）","",wx.wxITEM_CHECK)
+	g_menuItemUseMouseEvent=wx.wxMenuItem(g_menuPlay,ID_MENUITEM_USEMOUSEEVENT,"启用 send&Mouse","",wx.wxITEM_CHECK)
 	g_menuPlay:Append(g_menuItemUseMouseEvent)
 	g_menuItemUseMouseEvent:Check(g_useMouseEvent)
 
