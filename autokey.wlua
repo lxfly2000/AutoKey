@@ -243,10 +243,6 @@ g_onRunningScript=false
 g_onRecordingScript=false
 g_lastRecordEventTime=0
 
---DLL变量
-g_kernel32=nil
-g_user32=nil
-
 --WinAPI常量
 KEYEVENTF_KEYUP=0x0002
 WM_KEYDOWN=0x100
@@ -260,10 +256,8 @@ WM_LBUTTONDOWN=0x201
 WM_LBUTTONUP=0x202
 WM_RBUTTONDOWN=0x204
 WM_RBUTTONUP=0x205
-MOUSEEVENTF_ABSOLUTE=0x8000
 MOUSEEVENTF_LEFTDOWN=0x0002
 MOUSEEVENTF_LEFTUP=0x0004
-MOUSEEVENTF_MOVE=0x0001
 MOUSEEVENTF_RIGHTDOWN=0x0008
 MOUSEEVENTF_RIGHTUP=0x0010
 
@@ -273,20 +267,20 @@ MOUSE_RBUTTON=1
 
 --获取WindowsAPI
 function getWindowsApi()
-	g_kernel32=alien.load("kernel32.dll")
-	g_user32=alien.load("user32.dll")
 	--Kernel32.dll:VOID WINAPI Sleep(DWORD dwMilliseconds);
-	g_kernel32.Sleep:types{ret="void","ulong",abi="stdcall"}
+	alien.kernel32.Sleep:types{ret="void","ulong",abi="stdcall"}
 	--User32.dll:VOID WINAPI keybd_event(BYTE bVk,BYTE bScan,DWORD dwFlags,ULONG_PTR dwExtraInfo);
-	g_user32.keybd_event:types{ret="void","byte","byte","ulong","ulong",abi="stdcall"}
+	alien.user32.keybd_event:types{ret="void","byte","byte","ulong","ulong",abi="stdcall"}
 	--User32.dll:VOID WINAPI mouse_event(DWORD dwFlags,DWORD dx,DWORD dy,DWORD dwData,ULONG_PTR dwExtraInfo);
-	g_user32.mouse_event:types{ret="void","ulong","ulong","ulong","ulong","ulong",abi="stdcall"}
+	alien.user32.mouse_event:types{ret="void","ulong","ulong","ulong","ulong","ulong",abi="stdcall"}
+	--User32.dll:BOOL WINAPI SetCursorPos(int X,int Y);
+	alien.user32.SetCursorPos:types{ret="int","int","int",abi="stdcall"}
 	--User32.dll:HHOOK WINAPI SetWindowsHookEx(int idHook,HOOKPROC lpfn,HINSTANCE hMod,DWORD dwThreadId);
-	g_user32.SetWindowsHookExA:types{ret="pointer","int","callback","pointer","ulong",abi="stdcall"}
+	alien.user32.SetWindowsHookExA:types{ret="pointer","int","callback","pointer","ulong",abi="stdcall"}
 	--User32.dll:BOOL WINAPI UnhookWindowsHookEx(HHOOK hhk);
-	g_user32.UnhookWindowsHookEx:types{ret="int","pointer",abi="stdcall"}
+	alien.user32.UnhookWindowsHookEx:types{ret="int","pointer",abi="stdcall"}
 	--User32.dll:LRESULT WINAPI CallNextHookEx(HHOOK hhk,int nCode,WPARAM wParam,LPARAM lParam);
-	g_user32.CallNextHookEx:types{ret="long","pointer","int","uint","long",abi="stdcall"}
+	alien.user32.CallNextHookEx:types{ret="long","pointer","int","uint","long",abi="stdcall"}
 	--typedef LRESULT (CALLBACK* HOOKPROC)(int code, WPARAM wParam, LPARAM lParam);
 	g_hookproc=alien.callback(hookProcess,{ret="long","int","uint","pointer"--[["long"]],abi="stdcall"})--党中央已经钦定啦！参数3的类型就是pointer，这样吼不吼啊？
 end
@@ -295,7 +289,7 @@ function hookProcess(code,wParam,lParam)
 	if code==HC_ACTION then
 		processHookMsg(wParam,lParam)
 	end
-	return g_user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
+	return alien.user32.CallNextHookEx(g_hookKeyboard,code,wParam,lParam)
 end
 
 function changeHotkeyTip(ctrl,key)
@@ -350,9 +344,7 @@ end
 
 function addRecordMouseEvent(mButton,isPressDown,param)
 	local now_clock=os.clock()
-	--point=alien.tolong(param,2)--TODO：这样貌似不对？
-	local x=0--point[1]
-	local y=0--point[2]
+	local x,y=alien.tolong(param,2)
 	g_editScript:AppendText(string.format("sleep(%d)sendMouse(%d,%s,%d,%d)\n",(now_clock-g_lastRecordEventTime)*1000,mButton,isPressDown and "true" or "false",x,y))
 	g_lastRecordEventTime=now_clock
 	g_functionCount:addCount()
@@ -361,34 +353,35 @@ end
 --WindowsAPI函数调用
 function sleep(milliseconds)
 	if g_useSleep then
-		g_kernel32.Sleep(milliseconds)
+		alien.kernel32.Sleep(milliseconds)
 	end
 end
 
 function sendKey(vkCode,isPressDown)
 	if g_useKeyEvent then
-		g_user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
+		alien.user32.keybd_event(vkCode,0,isPressDown and 0 or KEYEVENTF_KEYUP,0)
 		g_functionCount:addCount()
 	end
 end
 
 function sendMouse(mButton,isPressDown,x,y)
 	if g_useMouseEvent then
-		local flag=MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE
+		local flag
 		if isPressDown then
 			if mButton==MOUSE_LBUTTON then
-				flag=flag+MOUSEEVENTF_LEFTDOWN
+				flag=MOUSEEVENTF_LEFTDOWN
 			elseif mButton==MOUSE_RBUTTON then
-				flag=flag+MOUSEEVENTF_RIGHTDOWN
+				flag=MOUSEEVENTF_RIGHTDOWN
 			end
 		else
 			if mButton==MOUSE_LBUTTON then
-				flag=flag+MOUSEEVENTF_LEFTUP
+				flag=MOUSEEVENTF_LEFTUP
 			elseif mButton==MOUSE_RBUTTON then
-				flag=flag+MOUSEEVENTF_RIGHTUP
+				flag=MOUSEEVENTF_RIGHTUP
 			end
 		end
-		g_user32.mouse_event(flag,x,y,0,0)
+		alien.user32.SetCursorPos(x,y)
+		alien.user32.mouse_event(flag,0,0,0,0)
 		g_functionCount:addCount()
 	end
 end
@@ -574,8 +567,8 @@ function createDialog()
 	end)
 
 	--注册钩子
-	g_hookKeyboard=g_user32.SetWindowsHookExA(WH_KEYBOARD_LL,g_hookproc,nil,nil)
-	g_hookMouse=g_user32.SetWindowsHookExA(WH_MOUSE_LL,g_hookproc,nil,nil)
+	g_hookKeyboard=alien.user32.SetWindowsHookExA(WH_KEYBOARD_LL,g_hookproc,nil,nil)
+	g_hookMouse=alien.user32.SetWindowsHookExA(WH_MOUSE_LL,g_hookproc,nil,nil)
 
 	--显示对话框
 	g_dialog:Show(true)
@@ -590,8 +583,8 @@ function releaseApp()
 	stopRecordScript()
 	stopRunScript()
 	g_sysicon:RemoveIcon()
-	g_user32.UnhookWindowsHookEx(g_hookMouse)
-	g_user32.UnhookWindowsHookEx(g_hookKeyboard)
+	alien.user32.UnhookWindowsHookEx(g_hookMouse)
+	alien.user32.UnhookWindowsHookEx(g_hookKeyboard)
 end
 
 --主函数
